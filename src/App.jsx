@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import LivePlot from "./components/LivePlot";
+import DataTile from "./components/DataTile";
 
 const SERVICE_UUID = "5b6b5f91-89a6-4dc8-b6d0-8f2c7a001001";
 const CHARACTERISTIC_UUID = "5b6b5f91-89a6-4dc8-b6d0-8f2c7a001002";
@@ -89,7 +91,19 @@ export default function App() {
   const [monitoring, setMonitoring] = useState(false);
   const [status, setStatus] = useState(initialStatus);
   const [logs, setLogs] = useState([]);
+  const [plotData, setPlotData] = useState([
+    [],
+    [],
+    [],
+    [],
+  ]);
   const [nowTick, setNowTick] = useState(Date.now);
+  const [liveData, setLiveData] = useState({
+    hv: "-",
+    cur: "-",
+    lv: "-",
+    temp: "-"
+  });
 
   const portRef = useRef(null);
   const readerRef = useRef(null);
@@ -136,6 +150,44 @@ export default function App() {
 
       const body = incoming.body;
       const pairs = parsePairs(body);
+
+      if (body.startsWith("DATA")) {
+
+          const hv = Number(pairs.hv ?? 0);
+          const cur = Number(pairs.cur ?? 0);
+
+          setLiveData({
+              hv: pairs.hv ?? "-",
+              cur: pairs.cur ?? "-",
+              lv: pairs.lv ?? "-",
+              temp: pairs.temp ?? "-"
+          });
+
+          setPlotData((prev) => {
+
+              const x=[...prev[0]];
+              const hvData=[...prev[1]];
+              const curData=[...prev[2]];
+              const powerData=[...prev[3]];
+
+              x.push(x.length);
+              hvData.push(hv);
+              curData.push(cur);
+              powerData.push(hv*cur/1000);
+
+              if(x.length>300){
+                  x.shift();
+                  hvData.shift();
+                  curData.shift();
+                  powerData.shift();
+              }
+
+              return [x,hvData,curData,powerData];
+
+          });
+
+          return;
+      }
 
       if (body.startsWith("BOOT")) {
         setStatus((current) => ({
@@ -416,6 +468,12 @@ export default function App() {
   const modeValue = status.mode === "UNKNOWN" ? (connected ? "확인 중" : "-") : status.mode;
   const modeTone = status.mode === "RECORD" ? "good" : status.mode === "USB" ? "idle" : "";
   const runLabel = status.running === null ? "UNKNOWN" : status.running ? "RUNNING" : "STOPPED";
+  const hv = Number(liveData.hv);
+  const cur = Number(liveData.cur);
+  const power =
+    Number.isFinite(hv) && Number.isFinite(cur)
+      ? (hv * cur / 1000).toFixed(2)
+      : "-";
 
   return (
     <div className="app-shell">
@@ -455,7 +513,6 @@ export default function App() {
             <StatusTile label="ERROR" value={status.err} tone={status.err !== "-" && status.err !== "0" ? "bad" : ""} detail={status.lastError} />
           </div>
         </section>
-
         <section className="panel command-panel">
           <div className="panel-title">
             <h2>제어</h2>
@@ -472,7 +529,59 @@ export default function App() {
             ))}
           </div>
         </section>
-
+        <section className="panel data-panel">
+          <div className="panel-title">
+            <h2>실시간 데이터</h2>
+          </div>
+          <div className="data-grid">
+            <DataTile
+              title="HV Voltage"
+              value={liveData.hv}
+              unit="V"
+              accent="red"
+            />
+            <DataTile
+              title="Current"
+              value={liveData.cur}
+              unit="A"
+              accent="blue"
+            />
+            <DataTile
+              title="Power"
+              value={power}
+              unit="kW"
+              accent="purple"
+            />
+            <DataTile
+              title="LV Voltage"
+              value={liveData.lv}
+              unit="V"
+            />
+            <DataTile
+              title="Temperature"
+              value={liveData.temp}
+              unit="℃"
+            />
+            <DataTile
+              title="Race"
+              value={status.race}
+            />
+            <DataTile
+              title="Lap"
+              value={status.lap}
+            />
+            <DataTile
+              title="Elapsed"
+              value="00:00:00"
+            />
+          </div>
+        </section>
+        <section className="panel graph-panel">
+            <div className="panel-title">
+                <h2>Live Graph</h2>
+            </div>
+            <LivePlot data={plotData}/>
+        </section>
         <section className="panel log-panel">
           <div className="panel-title">
             <h2>로그</h2>
@@ -480,7 +589,6 @@ export default function App() {
               지우기
             </button>
           </div>
-
           <div className="log-list">
             {logs.length === 0 ? (
               <div className="empty-log">연결 대기 중</div>
