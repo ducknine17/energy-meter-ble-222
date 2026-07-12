@@ -5,5 +5,5 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
 
-  base: "/fsk-energymeter-ble-222/",
+  base: "/energy-meter-ble-222/",
 })
